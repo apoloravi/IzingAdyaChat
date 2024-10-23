@@ -46,7 +46,7 @@
               :key="resposta.key"
               clickable
               v-close-popup
-              @click="mensagemRapidaSelecionada(resposta.message)"
+              @click="mensagemRapidaSelecionada(resposta)"
             >
               <q-item-section>
                 <q-item-label class="text-bold"> {{ resposta.key }} </q-item-label>
@@ -90,7 +90,7 @@
 
         <template v-if="!isRecordingAudio">
           <q-btn
-            v-if="$q.screen.width > 500 && ticketFocado.channel !== 'hub_facebook'"
+            v-if="$q.screen.width > 500"
             flat
             dense
             @click="abrirEnvioArquivo"
@@ -221,7 +221,7 @@
                 :disable="cDisableActions"
                 dense
                 round
-                v-if="$q.screen.width < 500 && ticketFocado.channel !== 'hub_facebook'"
+                v-if="$q.screen.width < 500"
                 class="bg-padrao btn-rounded"
                 :color="$q.dark.isActive ? 'white' : ''"
               >
@@ -261,9 +261,9 @@
             rounded
             append
             :max-files="5"
-            :max-file-size="ticketFocado.channel === 'hub_instagram' ? 8388608 : 15485760"
-            :max-total-size="ticketFocado.channel === 'hub_instagram' ? 8388608 : 15485760"
-            :accept="ticketFocado.channel === 'hub_instagram' ? '.jpeg, .png, .ico, .bmp, .webp, .*' : '.txt, .xml, .jpg, .png, image/jpeg, .pdf, .doc, .docx, .mp4, .ogg, .mp3, .xls, .xlsx, .jpeg, .rar, .zip, .ppt, .pptx, image/*'"
+            :max-file-size="15485760"
+            :max-total-size="15485760"
+            accept=".txt, .xml, .jpg, .png, image/jpeg, .pdf, .doc, .docx, .mp4, .ogg, .mp3, .xls, .xlsx, .jpeg, .rar, .zip, .ppt, .pptx, image/*"
             @rejected="onRejectedFiles"
           />
           <q-btn
@@ -404,7 +404,6 @@
 import { LocalStorage, uid } from 'quasar'
 import mixinCommon from './mixinCommon'
 import { EnviarMensagemTexto } from 'src/service/tickets'
-import { EnviarMensagemHub } from 'src/service/hub'
 import { VEmojiPicker } from 'v-emoji-picker'
 import { mapGetters } from 'vuex'
 import RecordingTimer from './RecordingTimer'
@@ -487,7 +486,21 @@ export default {
       }
     },
     mensagemRapidaSelecionada (mensagem) {
-      this.textChat = mensagem
+      console.log('mensagem', mensagem)
+
+      // Verifica se há um ID associado à mensagem
+      if (mensagem.id) {
+        // Remove qualquer ID e delimitador anterior da mensagem, se houver
+        mensagem.message = mensagem.message.replace(/^\[\d+\] - /, '')
+
+        // Adiciona o ID antes da mensagem
+        mensagem.message = `[${mensagem.id}] - ` + mensagem.message
+      }
+
+      // Define a mensagem no campo de entrada
+      this.textChat = mensagem.message
+
+      // Foca no campo de mensagem após o processamento
       setTimeout(() => {
         this.$refs.inputEnvioMensagem.focus()
       }, 300)
@@ -549,12 +562,7 @@ export default {
           formData.append('scheduleDate', this.scheduleDate)
         }
         const ticketId = this.ticketFocado.id
-        // await EnviarMensagemTexto(ticketId, formData)
-        if (this.ticketFocado.channel.includes('hub')) {
-          await EnviarMensagemHub(ticketId, formData)
-        } else {
-          await EnviarMensagemTexto(ticketId, formData)
-        }
+        await EnviarMensagemTexto(ticketId, formData)
         this.arquivos = []
         this.textChat = ''
         this.$emit('update:replyingMessage', null)
@@ -649,12 +657,7 @@ export default {
         : this.prepararUploadMedia()
       try {
         if (!this.cMostrarEnvioArquivo && !this.textChat) return
-        // await EnviarMensagemTexto(ticketId, message)
-        if (this.ticketFocado.channel.includes('hub')) {
-          await EnviarMensagemHub(ticketId, message)
-        } else {
-          await EnviarMensagemTexto(ticketId, message)
-        }
+        await EnviarMensagemTexto(ticketId, message)
         this.arquivos = []
         this.textChat = ''
         this.$emit('update:replyingMessage', null)
@@ -695,12 +698,7 @@ export default {
       this.loading = true
       const ticketId = this.ticketFocado.id
       try {
-        // await EnviarMensagemTexto(ticketId, message)
-        if (this.ticketFocado.channel.includes('hub')) {
-          await EnviarMensagemHub(ticketId, message)
-        } else {
-          await EnviarMensagemTexto(ticketId, message)
-        }
+        await EnviarMensagemTexto(ticketId, message)
         setTimeout(() => {
           this.scrollToBottom()
         }, 200)
@@ -729,24 +727,13 @@ export default {
       this.abrirModalPreviewImagem = false
     },
     onRejectedFiles (rejectedEntries) {
-      let message
-
-      if (this.ticketFocado.channel === 'hub_instagram') {
-        message = `Ops... Ocorreu um erro! <br>
-    <ul>
-    <li>Cada arquivo deve ter no máximo 8MB.</li>
-    <li>Apenas arquivos nos formatos .jpeg, .png, .ico, .bmp, .webp e .* são aceitos.</li>
-    </ul>`
-      } else {
-        message = `Ops... Ocorreu um erro! <br>
-    <ul>
-    <li>Cada arquivo deve ter no máximo 10MB.</li>
-    <li>Em caso de múltiplos arquivos, o tamanho total (soma de todos) deve ser de até 30MB.</li>
-    </ul>`
-      }
       this.$q.notify({
         html: true,
-        message: message,
+        message: `Ops... Ocorreu um erro! <br>
+        <ul>
+          <li>Cada arquivo deve ter no máximo 10MB.</li>
+          <li>Em caso de múltiplos arquivos, o tamanho total (soma de todos) deve ser de até 30MB.</li>
+        </ul>`,
         type: 'negative',
         progress: true,
         position: 'top',
